@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Content Search</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Web RAG Search</h1>
+    </header>
+    
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="search">Search</button>
+      <button class="tab-btn" data-tab="index">Index</button>
+      <button class="tab-btn" data-tab="history">History</button>
+    </div>
+    
+    <div class="tab-content" id="search-tab">
+      <div class="search-form">
+        <div class="search-input-container">
+          <input 
+            type="text" 
+            id="search-input" 
+            placeholder="Enter your search query..."
+            autofocus
+          >
+          <button id="search-btn">Search</button>
+        </div>
+      </div>
+      
+      <div class="results-container">
+        <div class="loading" id="search-loading">
+          <div class="spinner"></div>
+          <p>Searching...</p>
+        </div>
+        
+        <div id="search-results">
+          <!-- Results will be inserted here dynamically -->
+        </div>
+        
+        <div id="no-results" class="hidden">
+          <p>No results found. Try different search terms or index more pages.</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="tab-content hidden" id="index-tab">
+      <div class="index-status">
+        <p>Pages indexed: <span id="index-count">0</span></p>
+        <p>Storage used: <span id="storage-used">0 KB</span></p>
+        
+        <div class="actions">
+          <button id="index-current-btn" class="primary-btn">Index Current Page</button>
+          <button id="clear-index-btn" class="danger-btn">Clear All Data</button>
+        </div>
+      </div>
+      
+      <div class="loading" id="index-loading">
+        <div class="spinner"></div>
+        <p>Indexing page...</p>
+      </div>
+      
+      <div id="indexed-pages">
+        <!-- Indexed pages will be listed here -->
+        <ul class="page-list" id="page-list">
+          <!-- Pages will be inserted here dynamically -->
+        </ul>
+      </div>
+    </div>
+    
+    <div class="tab-content hidden" id="history-tab">
+      <h3>Recent Searches</h3>
+      <ul class="search-history" id="search-history">
+        <!-- Search history will be inserted here -->
+      </ul>
+      <button id="clear-history-btn" class="secondary-btn">Clear History</button>
+    </div>
+    
+    <footer>
+      <p>Web RAG Search - Vector search for web content</p>
+    </footer>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html> 
