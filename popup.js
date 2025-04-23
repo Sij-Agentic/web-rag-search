@@ -133,6 +133,9 @@ function displaySearchResults(results) {
       const url = button.getAttribute('data-url');
       const text = decodeURIComponent(button.getAttribute('data-text'));
       
+      console.log('Opening page for highlighting:', url);
+      console.log('Text to highlight:', text.substring(0, 50) + '...');
+      
       // Open tab and highlight text
       chrome.tabs.create({ url: url }, (tab) => {
         // We need to wait for the page to load before highlighting
@@ -141,13 +144,36 @@ function displaySearchResults(results) {
             // Remove the listener to avoid multiple calls
             chrome.tabs.onUpdated.removeListener(listener);
             
-            // Send highlight message to content script
+            console.log('Page loaded, attempting to highlight text');
+            
+            // Give the page a bit more time to fully render before highlighting
             setTimeout(() => {
               chrome.tabs.sendMessage(tab.id, {
                 action: 'highlightText',
                 text: text
+              }, (response) => {
+                // Log the response from the content script
+                if (chrome.runtime.lastError) {
+                  console.error('Error sending highlight message:', chrome.runtime.lastError);
+                  
+                  // Try injecting the content script and try again
+                  chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['content.js']
+                  }, () => {
+                    // Wait for script to initialize
+                    setTimeout(() => {
+                      chrome.tabs.sendMessage(tab.id, {
+                        action: 'highlightText',
+                        text: text
+                      });
+                    }, 500);
+                  });
+                } else {
+                  console.log('Highlight response:', response);
+                }
               });
-            }, 1000); // Give the page a second to fully render
+            }, 1500); // Increased delay for more reliable highlighting
           }
         });
       });

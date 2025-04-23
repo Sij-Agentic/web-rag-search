@@ -139,7 +139,9 @@ function getAllTextContent(element) {
 
 // Highlight text on the page
 function highlightText(textToHighlight) {
-  // Remove any existing highlights
+  console.log("Highlighting text:", textToHighlight.substring(0, 50) + '...');
+  
+  // First, remove any existing highlights
   const existingHighlights = document.querySelectorAll('.web-rag-highlight');
   existingHighlights.forEach(el => {
     const parent = el.parentNode;
@@ -151,8 +153,38 @@ function highlightText(textToHighlight) {
   
   if (!textToHighlight) return;
   
+  // Prepare text for better fuzzy matching
+  // Normalize whitespace and create a clean version for matching
+  const normalizedText = textToHighlight
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // First try exact matching
+  let found = highlightExactMatch(normalizedText);
+  
+  // If exact match fails, try fuzzy matching with smaller chunks
+  if (!found) {
+    console.log("Exact match failed, trying sentence-by-sentence matching");
+    
+    // Split text into sentences for more flexible matching
+    const sentences = normalizedText.split(/[.!?]+/).filter(s => s.trim().length > 10);
+    
+    // Try to highlight each sentence
+    for (const sentence of sentences) {
+      highlightExactMatch(sentence.trim());
+    }
+  }
+  
+  // Create a button to remove highlights
+  createHighlightControls();
+}
+
+// Try to find and highlight an exact text match
+function highlightExactMatch(text) {
+  if (!text || text.length < 5) return false;
+  
   // Create regex for matching the text (case insensitive)
-  const escapedText = textToHighlight
+  const escapedText = text
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
     .replace(/\s+/g, '\\s+'); // Allow any whitespace
 
@@ -160,10 +192,12 @@ function highlightText(textToHighlight) {
   
   // Walk through text nodes and highlight matches
   const textNodes = getTextNodes(document.body);
+  let found = false;
   
   textNodes.forEach(node => {
     const matches = regex.exec(node.textContent);
     if (matches) {
+      found = true;
       const matchedText = matches[0];
       const startIndex = matches.index;
       
@@ -177,8 +211,13 @@ function highlightText(textToHighlight) {
         const span = document.createElement('span');
         span.className = 'web-rag-highlight';
         span.textContent = matchedText;
+        
+        // Apply more visible styling
         span.style.backgroundColor = '#FFFF00';
         span.style.color = '#000000';
+        span.style.padding = '2px';
+        span.style.borderRadius = '3px';
+        span.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.2)';
         
         const fragment = document.createDocumentFragment();
         if (beforeText) fragment.appendChild(document.createTextNode(beforeText));
@@ -198,6 +237,57 @@ function highlightText(textToHighlight) {
         });
       }
     }
+  });
+  
+  return found;
+}
+
+// Create UI controls for highlights
+function createHighlightControls() {
+  // Remove any existing controls
+  const existingControls = document.querySelector('.web-rag-controls');
+  if (existingControls) existingControls.remove();
+  
+  // Count highlights
+  const highlights = document.querySelectorAll('.web-rag-highlight');
+  if (highlights.length === 0) return;
+  
+  // Create controls container
+  const controls = document.createElement('div');
+  controls.className = 'web-rag-controls';
+  controls.style.position = 'fixed';
+  controls.style.top = '10px';
+  controls.style.right = '10px';
+  controls.style.zIndex = '9999';
+  controls.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+  controls.style.color = 'white';
+  controls.style.padding = '10px';
+  controls.style.borderRadius = '5px';
+  controls.style.fontFamily = 'Arial, sans-serif';
+  controls.style.fontSize = '14px';
+  
+  controls.innerHTML = `
+    <div style="margin-bottom:8px">
+      <strong>${highlights.length} matches found</strong>
+    </div>
+    <button id="web-rag-clear" style="background:#f44336;color:white;border:none;padding:5px 10px;cursor:pointer;border-radius:3px;margin-right:5px">
+      Remove Highlights
+    </button>
+  `;
+  
+  document.body.appendChild(controls);
+  
+  // Add event listeners
+  document.getElementById('web-rag-clear').addEventListener('click', () => {
+    const highlights = document.querySelectorAll('.web-rag-highlight');
+    highlights.forEach(el => {
+      const parent = el.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+      }
+    });
+    controls.remove();
   });
 }
 

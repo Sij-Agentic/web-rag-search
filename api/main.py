@@ -239,9 +239,15 @@ async def search(query: SearchQuery):
                 if item_data:
                     # Convert distance to similarity score (closer distance = higher similarity)
                     # FAISS uses L2 distance, so we need to convert to a similarity score
-                    # We use a simple exponential decay function
+                    # Use a better similarity score calculation that gives more meaningful percentages
                     distance = distances[0][i]
-                    similarity_score = np.exp(-distance)
+                    
+                    # Maximum reasonable L2 distance (tuned for typical embeddings)
+                    max_distance = 4.0 
+                    
+                    # Normalize and invert the distance (0 distance = 100% similarity)
+                    # Cap the minimum similarity at 1%
+                    similarity_score = max(0.01, 1.0 - min(1.0, distance / max_distance))
                     
                     results.append({
                         "url": item_data["url"],
