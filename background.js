@@ -1,52 +1,38 @@
-// Import FAISS for vector indexing
-importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js');
-importScripts('https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js');
+// Background script for Web RAG Search extension
+// Refactored to use FastAPI backend for vectorization and indexing
 
-// Global state
-let index = null;
+// Configuration for the FastAPI backend
+const API_BASE_URL = 'http://localhost:8000';
+
+// Global state - only store document metadata, not vectors
 let documentMap = {};
-let pipeline = null;
 
-// Initialize the embedding model
-async function initializeModel() {
+// Initialize when the service worker starts
+async function initialize() {
   try {
-    pipeline = await new Transformers.Pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-    console.log('Embedding model initialized');
-  } catch (error) {
-    console.error('Error initializing model:', error);
-  }
-}
-
-// Create a new index or load existing one
-async function initializeIndex() {
-  try {
-    // Load from storage if exists
-    const data = await chrome.storage.local.get(['vectorIndex', 'documentMap']);
+    // Load documentMap from storage if exists
+    const data = await chrome.storage.local.get(['documentMap']);
     
-    if (data.vectorIndex && data.documentMap) {
-      index = data.vectorIndex;
+    if (data.documentMap) {
       documentMap = data.documentMap;
-      console.log('Loaded existing index with', Object.keys(documentMap).length, 'documents');
+      console.log('Loaded existing document map with', Object.keys(documentMap).length, 'documents');
     } else {
-      // Create new index
-      index = {};
+      // Create new document map
       documentMap = {};
-      console.log('Created new vector index');
+      console.log('Created new document map');
     }
   } catch (error) {
-    console.error('Error initializing index:', error);
-    index = {};
+    console.error('Error initializing document map:', error);
     documentMap = {};
   }
 }
 
-// Save index to storage
-async function saveIndex() {
+// Save document map to storage
+async function saveDocumentMap() {
   await chrome.storage.local.set({
-    vectorIndex: index,
     documentMap: documentMap
   });
-  console.log('Index saved to storage');
+  console.log('Document map saved to storage');
 }
 
 // Handle incoming messages
@@ -72,49 +58,85 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true; // Keep channel open for async response
   }
+  
+  if (message.type === 'deletePage') {
+    // Handle page deletion
+    deletePage(message.url)
+      .then(() => sendResponse({success: true}))
+      .catch(error => {
+        console.error('Error deleting page:', error);
+        sendResponse({success: false, error: error.toString()});
+      });
+    return true;
+  }
+  
+  if (message.type === 'clearAllData') {
+    // Handle clear all data
+    clearAllData()
+      .then(() => sendResponse({success: true}))
+      .catch(error => {
+        console.error('Error clearing data:', error);
+        sendResponse({success: false, error: error.toString()});
+      });
+    return true;
+  }
+  
+  if (message.type === 'getDocumentMap') {
+    // Return the current document map
+    sendResponse({documentMap: documentMap});
+    return false;
+  }
 });
 
-// Process and index page content
+// Process and index page content through the FastAPI backend
 async function indexPage(url, content, title) {
-  if (!pipeline) await initializeModel();
-  
   // Simple text chunking (can be improved with better NLP)
   const chunks = chunkText(content);
   
-  // For each chunk, create embedding and store in index
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    if (chunk.trim().length < 10) continue; // Skip very small chunks
-    
-    // Generate embedding
-    const embedding = await getEmbedding(chunk);
-    
-    // Store in index 
-    const chunkId = `${url}-${i}`;
-    
-    // Using a simple in-memory structure, but in a real app would use FAISS
-    if (!index[url]) index[url] = [];
-    index[url].push({
-      id: chunkId,
-      embedding: embedding,
-      chunk: chunk
-    });
-    
-    // Update document map
-    if (!documentMap[url]) {
-      documentMap[url] = {
-        title: title,
-        chunks: []
-      };
-    }
-    documentMap[url].chunks.push({
-      id: chunkId,
-      text: chunk
-    });
+  // Skip if no meaningful content
+  if (chunks.length === 0) {
+    throw new Error('No meaningful content found to index');
   }
   
-  // Save updated index
-  await saveIndex();
+  try {
+    // Send page data to the FastAPI backend for vectorization and indexing
+    const response = await fetch(`${API_BASE_URL}/index`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: url,
+        title: title,
+        chunks: chunks
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`API Error: ${errorData.detail || response.statusText}`);
+    }
+    
+    const result = await response.json();
+    
+    // Store metadata in our local document map
+    documentMap[url] = {
+      title: title,
+      chunks: chunks.map((chunk, index) => ({
+        id: `${url}-${index}`,
+        text: chunk
+      })),
+      indexed_at: new Date().toISOString()
+    };
+    
+    // Save document map
+    await saveDocumentMap();
+    
+    return result;
+  } catch (error) {
+    console.error('Error in indexPage:', error);
+    throw error;
+  }
 }
 
 // Basic text chunking function
@@ -141,72 +163,100 @@ function chunkText(text, maxChunkSize = 500) {
   return chunks;
 }
 
-// Get embedding for text
-async function getEmbedding(text) {
-  try {
-    const result = await pipeline(text, {
-      pooling: 'mean',
-      normalize: true
-    });
-    return Array.from(result.data);
-  } catch (error) {
-    console.error('Error generating embedding:', error);
-    return new Array(384).fill(0); // Default empty embedding
-  }
-}
-
-// Search content using vector similarity
+// Search content via the FastAPI backend
 async function searchContent(query) {
-  if (!pipeline) await initializeModel();
-  
-  // Get query embedding
-  const queryEmbedding = await getEmbedding(query);
-  
-  // Simple cosine similarity search across all vectors
-  const results = [];
-  
-  for (const url in index) {
-    for (const item of index[url]) {
-      const similarity = cosineSimilarity(queryEmbedding, item.embedding);
-      results.push({
-        url: url,
-        chunkId: item.id,
-        text: item.chunk,
-        title: documentMap[url]?.title || url,
-        score: similarity
-      });
+  try {
+    // Call the search endpoint
+    const response = await fetch(`${API_BASE_URL}/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: query
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`API Error: ${errorData.detail || response.statusText}`);
     }
+    
+    const searchResults = await response.json();
+    
+    // Enhance results with data from our document map
+    const enhancedResults = searchResults.results.map(result => {
+      const url = result.url;
+      const documentInfo = documentMap[url] || { title: url };
+      
+      return {
+        ...result,
+        title: documentInfo.title || url
+      };
+    });
+    
+    return enhancedResults;
+  } catch (error) {
+    console.error('Error in searchContent:', error);
+    throw error;
   }
-  
-  // Sort by similarity score (descending)
-  results.sort((a, b) => b.score - a.score);
-  
-  // Return top 5 results
-  return results.slice(0, 5);
 }
 
-// Calculate cosine similarity between two vectors
-function cosineSimilarity(vecA, vecB) {
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
+// Delete a page from the index
+async function deletePage(url) {
+  try {
+    // Call the delete endpoint
+    const response = await fetch(`${API_BASE_URL}/delete`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: url
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`API Error: ${errorData.detail || response.statusText}`);
+    }
+    
+    // Remove from our document map
+    if (documentMap[url]) {
+      delete documentMap[url];
+      await saveDocumentMap();
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error in deletePage:', error);
+    throw error;
   }
-  
-  normA = Math.sqrt(normA);
-  normB = Math.sqrt(normB);
-  
-  if (normA === 0 || normB === 0) {
-    return 0;
+}
+
+// Clear all indexed data
+async function clearAllData() {
+  try {
+    // Call the clear endpoint
+    const response = await fetch(`${API_BASE_URL}/clear`, {
+      method: 'POST'
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`API Error: ${errorData.detail || response.statusText}`);
+    }
+    
+    // Clear local document map
+    documentMap = {};
+    await saveDocumentMap();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error in clearAllData:', error);
+    throw error;
   }
-  
-  return dotProduct / (normA * normB);
 }
 
 // Initialize when the service worker starts
-initializeModel();
-initializeIndex(); 
+initialize(); 

@@ -1,59 +1,61 @@
-# Web RAG Search Chrome Extension
+# Web Content RAG Search
 
-A Chrome extension that allows you to index web content using vector embeddings and search across your indexed content using semantic similarity.
+A browser extension that indexes web content and provides semantic search using vector embeddings.
 
-## Features
+## New Architecture
 
-- **Content Indexing**: Automatically extract and index content from any web page you visit
-- **Vector Search**: Search your indexed content using natural language queries
-- **Highlighted Results**: View relevant content with your search matches highlighted
-- **History Tracking**: Keep track of your previous searches
+This project now uses a client-server architecture:
 
-## Installation
+1. **Browser Extension**: A lightweight client that captures web content and provides the user interface for search
+2. **FastAPI Server**: A backend service that handles vectorization and indexing using Ollama and FAISS
 
-1. Clone or download this repository
-2. Open Chrome and go to `chrome://extensions/`
-3. Enable "Developer mode" at the top right
-4. Click "Load unpacked" and select the `chrome-plugin` folder from this repository
-5. The extension should now be installed and visible in your Chrome toolbar
+This separation of concerns provides several benefits:
+- Smaller, more maintainable browser extension
+- Better vector search performance using FAISS
+- High-quality embeddings using Ollama models
+- Centralized index that can be shared across browsers/devices
 
-## How to Use
+## Components
 
-### Indexing Content
+### Browser Extension
 
-1. Visit any webpage you want to index
-2. Click on the Web RAG Search extension icon in your toolbar to open the popup
-3. Go to the "Index" tab
-4. Click "Index Current Page" to extract and index the content
-5. The page will be processed and added to your local index
+The extension allows users to:
+- Index the content of web pages they visit
+- Search through indexed content using natural language queries
+- View and manage their indexed pages
 
-### Searching Content
+### FastAPI Server
 
-1. Click on the Web RAG Search extension icon in your toolbar
-2. Enter your search query in the search box
-3. Click "Search" or press Enter
-4. View the search results ranked by relevance
-5. Click "View & Highlight" on any result to open the page with the relevant content highlighted
+The server handles:
+- Generating embeddings for text chunks using Ollama
+- Storing and searching vectors efficiently with FAISS
+- Persistent storage of the index
 
-### Managing Indexed Content
+## Setup
 
-1. Go to the "Index" tab in the extension popup
-2. View all indexed pages and their statistics
-3. Use the "Delete" button to remove individual pages from the index
-4. Use the "Clear All Data" button to remove all indexed content
+### 1. Set up the FastAPI server
 
-## Privacy
+See [API README](api/README.md) for detailed instructions.
 
-All indexed content is stored locally in your browser using Chrome's storage API. No data is sent to external servers except for the transformers model which is loaded from a CDN.
+### 2. Install the browser extension
 
-## Technical Details
+1. Load the extension in Chrome:
+   - Go to `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked" and select this directory
 
-This extension uses:
-- Transformers.js for embedding generation (MiniLM-L6-v2 model)
-- Semantic similarity search with cosine similarity
-- Chrome's storage API for persisting indexed content
-- Content extraction with DOM manipulation
+## Usage
 
-## License
+1. Start the FastAPI server
+2. Open the extension popup
+3. Index web pages you want to search later
+4. Use the search tab to find content across your indexed pages
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+## Development
+
+- The extension is built with vanilla JavaScript
+- The API server uses FastAPI, FAISS, and Ollama
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Web Content RAG Search",
   "version": "1.0",
-  "description": "Index web content and search it using vector embeddings",
+  "description": "Index web content and search it using vector embeddings with FastAPI backend",
   "permissions": [
     "activeTab",
     "storage",
@@ -25,7 +25,18 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'; child-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["highlight.js"],
+      "matches": ["<all_urls>"]
     }
   ]
 } 
